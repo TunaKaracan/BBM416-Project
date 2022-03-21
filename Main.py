@@ -13,7 +13,7 @@ mp_draw = mp.solutions.drawing_utils
 
 prev_time = time.time()
 
-gestures = ['One', 'Two', 'Three']
+gestures = ['Left', 'Right', 'Middle']
 num_gestures = len(gestures)
 saved_gesture_index = 0
 
@@ -78,7 +78,6 @@ while True:
                 lm_points_normalized.append(norm_y)
 
             predictions = model.predict([lm_points_normalized])
-            print(predictions)
             prediction, prediction_index = np.amax(predictions), np.argmax(predictions)
             if prediction > 0.8:
                 cv2.putText(img, gestures[prediction_index], (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
@@ -90,4 +89,4 @@ while True:
     cv2.putText(img, str(int(delta_time)), (0, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
     prev_time = current_time
     cv2.imshow('Image', img)
-    cv2.waitKey(1)
+    cv2.waitKey(0)
