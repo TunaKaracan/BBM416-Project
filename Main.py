@@ -89,4 +89,4 @@ while True:
     cv2.putText(img, str(int(delta_time)), (0, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
     prev_time = current_time
     cv2.imshow('Image', img)
-    cv2.waitKey(0)
+    cv2.waitKey(1)
