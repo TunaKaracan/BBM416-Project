@@ -5,60 +5,80 @@ import pandas as pd
 
 import os
 
-gestures = {'9': 0, '8': 1, '7': 2}  # 0 = Left Click, 1 = Right Click, 2 = Mouse Wheel
 
-in_dir = 'input'
-out_dir = 'output'
-out_name = 'data.csv'
-
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.88)
-mp_draw = mp.solutions.drawing_utils
+def find_bounding_box(coords):
+    x_coords, y_coords = zip(*coords)
+    return [min(x_coords), min(y_coords), max(x_coords), max(y_coords)]
 
 
-def find_bounding_box(points):
-    x_coordinates, y_coordinates = zip(*points)
-    return [min(x_coordinates), min(y_coordinates), max(x_coordinates), max(y_coordinates)]
+def create_skeleton(image_path, _out_dir, _out_path, _gestures, _gesture_name, _mp_hands, _hands, _mp_draw):
+    upscale_factor = 4
+
+    img = cv2.flip(cv2.imread(image_path), 1)
+    img = cv2.resize(img, (int(img.shape[1] * upscale_factor), int(img.shape[0] * upscale_factor)), interpolation=cv2.INTER_AREA)
+    img = cv2.GaussianBlur(img, (5, 5), 0)
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    h, w = img_rgb.shape[:2]
+    results = _hands.process(img_rgb)
+    out_path_csv = os.path.join(_out_dir, _out_path)
+
+    if results.multi_hand_landmarks:
+        for hand in results.multi_hand_landmarks:
+            is_right_handed = True if results.multi_handedness[0].classification[0].label == 'Right' else False
+
+            lm_points = []
+            for landmark in hand.landmark:
+                lm_points.append(landmark.x)
+                lm_points.append(landmark.y)
+
+            lm_points_2d = np.reshape(lm_points, (len(hand.landmark), 2))
+            bounding_box = find_bounding_box(lm_points_2d)
+
+            lm_points_normalized = []
+            for x, y in lm_points_2d:
+                norm_x = (x - bounding_box[0]) / (bounding_box[2] - bounding_box[0])
+                norm_y = (y - bounding_box[1]) / (bounding_box[3] - bounding_box[1])
+                lm_points_normalized.append(norm_x if is_right_handed else 1 - norm_x)
+                lm_points_normalized.append(norm_y)
+            for i in range(len(_gestures)):
+                lm_points_normalized.append(1 if i == _gestures[_gesture_name] else 0)
+
+            df = pd.DataFrame([lm_points_normalized])
+            df.to_csv(out_path_csv, mode='a', index=False, header=not os.path.exists(out_path_csv))
+
+            img_skeleton = np.zeros(img.shape)
+            _mp_draw.draw_landmarks(img_skeleton, hand, _mp_hands.HAND_CONNECTIONS)
+            bounding_box = [int(bounding_box[0] * w), int(bounding_box[1] * h), int(bounding_box[2] * w), int(bounding_box[3] * h)]
+            bounding_box = np.clip(bounding_box, 0, max(h, w) * upscale_factor)
+            return img_skeleton[bounding_box[1]:bounding_box[3] + 1, bounding_box[0]:bounding_box[2] + 1]
+    else:
+        return None
 
 
-in_names = os.listdir(in_dir)
-for in_name in in_names:
-    in_path = os.path.join(in_dir, in_name)
-    out_path_csv = os.path.join(out_dir, out_name)
-    out_path_png = os.path.join(out_dir, in_name)
-    gesture_name = in_path.split('_')[1]
+def dfs(cur_path, prev_path, _out_dir, _out_path, _gestures, _mp_hands, _hands, _mp_draw):
+    print(cur_path)
+    try:
+        sub_dirs = os.listdir(cur_path)
+        for sub_dir in sub_dirs:
+            dfs(os.path.join(cur_path, sub_dir), cur_path, _out_dir, _out_path, _gestures, _mp_hands, _hands, _mp_draw)
+    except NotADirectoryError:
+        cur_dirs, prev_dirs = cur_path.split(os.path.sep), prev_path.split(os.path.sep)
+        cur_dirs[0] = prev_dirs[0] = out_dir
+        os.makedirs(os.path.join(*prev_dirs), exist_ok=True)
+        skeleton = create_skeleton(cur_path, _out_dir, _out_path, _gestures, prev_dirs[-1], _mp_hands, _hands, _mp_draw)
+        if skeleton is not None:
+            cv2.imwrite(os.path.join(*cur_dirs), skeleton)
 
-    if gesture_name in gestures.keys():
-        img = cv2.flip(cv2.imread(in_path), 1)
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        h, w = img_rgb.shape[:2]
-        results = hands.process(img_rgb)
 
-        if results.multi_hand_landmarks:
-            for hand in results.multi_hand_landmarks:
-                is_right_handed = True if results.multi_handedness[0].classification[0].label == 'Right' else False
+if __name__ == '__main__':
+    in_dir = 'input'
+    out_dir = 'output'
+    out_path = 'data.csv'
 
-                lm_points = []
-                for landmark in hand.landmark:
-                    lm_points.append(landmark.x)
-                    lm_points.append(landmark.y)
+    gestures = {'A': 0, 'B': 1, 'C': 2}
 
-                lm_points_2d = np.reshape(lm_points, (len(hand.landmark), 2))
-                bounding_box = find_bounding_box(lm_points_2d)
+    mp_hands = mp.solutions.hands
+    hands = mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.9)
+    mp_draw = mp.solutions.drawing_utils
 
-                lm_points_normalized = []
-                for x, y in lm_points_2d:
-                    norm_x = (x - bounding_box[0]) / (bounding_box[2] - bounding_box[0])
-                    norm_y = (y - bounding_box[1]) / (bounding_box[3] - bounding_box[1])
-                    lm_points_normalized.append(norm_x if is_right_handed else 1 - norm_x)
-                    lm_points_normalized.append(norm_y)
-                for i in range(len(gestures.keys())):
-                    lm_points_normalized.append(1 if i == gestures[gesture_name] else 0)
-
-                df = pd.DataFrame([lm_points_normalized])
-                df.to_csv(out_path_csv, mode='a', index=False, header=not os.path.exists(out_path_csv))
-
-                img_skeleton = np.zeros(img.shape)
-                mp_draw.draw_landmarks(img_skeleton, hand, mp_hands.HAND_CONNECTIONS)
-                bounding_box = [int(bounding_box[0] * w), int(bounding_box[1] * h), int(bounding_box[2] * w), int(bounding_box[3] * h)]
-                cv2.imwrite(out_path_png, img_skeleton[bounding_box[1]:bounding_box[3] + 1, bounding_box[0]:bounding_box[2] + 1])
+    dfs(in_dir, str(), out_dir, out_path, gestures, mp_hands, hands, mp_draw)
