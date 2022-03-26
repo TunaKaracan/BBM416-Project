@@ -56,7 +56,7 @@ def create_skeleton(image_path, _out_dir, _out_path, _gestures, _gesture_name, _
 
 
 def dfs(cur_path, prev_path, _out_dir, _out_path, _gestures, _mp_hands, _hands, _mp_draw):
-    print(cur_path)
+    print(f'Currently processing: {cur_path}')
     try:
         sub_dirs = os.listdir(cur_path)
         for sub_dir in sub_dirs:
