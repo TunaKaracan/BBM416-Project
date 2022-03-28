@@ -13,11 +13,11 @@ mp_draw = mp.solutions.drawing_utils
 
 prev_time = time.time()
 
-gestures = ['Left', 'Right', 'Middle']
+gestures = ['A', 'B', 'C']
 num_gestures = len(gestures)
 saved_gesture_index = 0
 
-model = tf.keras.models.load_model('model.h5')
+model = tf.keras.models.load_model('model/model.h5')
 
 
 def find_bounding_box(points):
@@ -78,8 +78,9 @@ while True:
                 lm_points_normalized.append(norm_y)
 
             predictions = model.predict([lm_points_normalized])
+            print(predictions)
             prediction, prediction_index = np.amax(predictions), np.argmax(predictions)
-            if prediction > 0.8:
+            if prediction > 0.9:
                 cv2.putText(img, gestures[prediction_index], (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
             else:
                 cv2.putText(img, 'Neutral', (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
