@@ -1,5 +1,4 @@
-import Preprocessing
-
+import Preprocessing, Util
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -9,7 +8,7 @@ import os
 
 
 lr = 1e-4
-n_epochs = 20
+n_epochs = 50
 n_batches = 128
 
 
@@ -21,13 +20,34 @@ def create_dataset(_hands):
         if dirpath is not input_dir:  # Ignoring the first path, as it's the folder containing the class sub-folders
             for i in filenames:
                 path = dirpath + '\\' + i
+                curr_loc = dirpath.split("\\")
                 gesture = gestures[dirpath.split("\\")[-1]]
 
-                img = cv2.flip(cv2.imread(path), 1)
-                img = Preprocessing.segmentate_image(img)
-                img = cv2.resize(img, (200, 200))
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                dataset.append({"Name": i, "Class": gesture, "Image Data": img.tolist()})
+                img_orig = cv2.flip(cv2.imread(path), 1)
+                results = hands.process(img_orig)
+
+                if results.multi_hand_landmarks:
+                    for hand in results.multi_hand_landmarks:
+                        h, w, c = img_orig.shape
+                        lm_points = []
+                        for landmark in hand.landmark:
+                            lm_points.append(landmark.x)
+                            lm_points.append(landmark.y)
+
+                        saved_frame_2d = np.reshape(lm_points, (len(hand.landmark), 2))
+                        bb = Util.find_bounding_box(saved_frame_2d)
+                        bb = [(len(img_orig[0]) * bb[0]), (len(img_orig) * bb[1]), (len(img_orig[0]) * bb[2]),
+                              (len(img_orig) * bb[3])]
+                        bias_x, bias_y = (bb[2] - bb[0]) // 5, (bb[3] - bb[1]) // 5
+                        bb = [Util.clamp(bb[0] - bias_x, 0, w), Util.clamp(bb[1] - bias_y, 0, h),
+                              Util.clamp(bb[2] + bias_x, 0, w), Util.clamp(bb[3] + bias_y, 0, h)]
+
+                        img_seg = Preprocessing.segmentate_image_kmeans(img_orig)
+                        img_seg = img_seg[int(bb[1]):int(bb[3]), int(bb[0]):int(bb[2])]
+                        img_seg = cv2.resize(img_seg, (32, 32))
+                        img_seg = cv2.cvtColor(img_seg, cv2.COLOR_BGR2GRAY)
+                        cv2.imwrite(curr_loc[0] + "_seg/" + curr_loc[1] + "/" + i, img_seg)
+                        dataset.append({"Name": i, "Class": gesture, "Image Data": img_seg.tolist()})
 
             print("Class {0} completed".format(gesture))
 
@@ -35,7 +55,7 @@ def create_dataset(_hands):
 
 
 if __name__ == '__main__':
-    input_dir = "input"
+    input_dir = "input_new_2"
     gestures = {"A": 0, "B": 1, "C": 2}  # 0 = Left Click, 1 = Right Click, 2 = Middle Click
 
     mp_hands = mp.solutions.hands
@@ -43,17 +63,6 @@ if __name__ == '__main__':
     mp_draw = mp.solutions.drawing_utils
 
     gestures = {"A": 0, "B": 1, "C": 2}  # 0 = Left Click, 1 = Right Click, 2 = Middle Click
-
-    """
-    # SEGMENTATION TEST
-    sample_img = cv2.flip(cv2.imread("input/A/A1042.jpg"), 1)
-    sample_img_seg = Preprocessing.segmentate_image_kmeans(sample_img)
-    sample_img_seg = cv2.cvtColor(sample_img_seg, cv2.COLOR_BGR2GRAY)
-    cv2.imshow("Image", sample_img)
-    cv2.imshow("Segmentated Image", sample_img_seg)
-    cv2.waitKey(0)
-    exit()
-    """
 
     df_img = create_dataset(hands)
 

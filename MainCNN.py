@@ -30,11 +30,8 @@ while True:
 
     if results.multi_hand_landmarks:
         for hand in results.multi_hand_landmarks:
-            img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
 
             h, w, c = img.shape
-            mp_draw.draw_landmarks(img, hand, mp_hands.HAND_CONNECTIONS)
-
             lm_points = []
             for landmark in hand.landmark:
                 lm_points.append(landmark.x)
@@ -47,22 +44,22 @@ while True:
             bias_x, bias_y = (bb[2] - bb[0]) // 5, (bb[3] - bb[1]) // 5
             bb = [Util.clamp(bb[0] - bias_x, 0, w), Util.clamp(bb[1] - bias_y, 0, h), Util.clamp(bb[2] + bias_x, 0, w), Util.clamp(bb[3] + bias_y, 0, h)]
 
-            img_bb = img_rgb[int(bb[1]):int(bb[3]), int(bb[0]):int(bb[2])]
-            if img_bb is not None:
-                img_bb = Preprocessing.segmentate_image(img_bb)
-                img_bb = cv2.resize(img_bb, (200, 200))
-                img_bb = cv2.cvtColor(img_bb, cv2.COLOR_BGR2GRAY)
-                cv2.imshow("Test", img_bb)
-                cv2.waitKey(1)
+            img_bb = Preprocessing.segmentate_image_kmeans(img_rgb)
+            img_bb = img_bb[int(bb[1]):int(bb[3]), int(bb[0]):int(bb[2])]
+            img_bb = cv2.resize(img_bb, (32, 32))
+            img_bb = cv2.cvtColor(img_bb, cv2.COLOR_BGR2GRAY)
+            img_bb = cv2.bitwise_not(img_bb)
+            cv2.imshow("Test", img_bb)
+            cv2.waitKey(1)
 
-                predictions = model.predict([img_bb.tolist()])
-                prediction, prediction_index = np.amax(predictions), np.argmax(predictions)
-                if prediction > 0.9:
-                    cv2.putText(img, gestures[prediction_index], (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
-                    print("Prediction Confidence:", prediction)
-                    print("Predicted Class:", prediction_index)
-                else:
-                    cv2.putText(img, 'Neutral', (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
+            predictions = model.predict([img_bb.tolist()])
+            prediction, prediction_index = np.amax(predictions), np.argmax(predictions)
+            if prediction > 0.9:
+                cv2.putText(img, gestures[prediction_index], (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
+                print("Prediction Confidence:", prediction)
+                print("Predicted Class:", prediction_index)
+            else:
+                cv2.putText(img, 'Neutral', (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
 
     current_time = time.time()
     delta_time = 1 / (current_time - prev_time)
