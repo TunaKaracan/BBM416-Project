@@ -13,7 +13,7 @@ mp_draw = mp.solutions.drawing_utils
 
 prev_time = time.time()
 
-gestures = ['A', 'B', 'C']
+gestures = ['Left Click', 'Right Click', 'Middle Click']
 num_gestures = len(gestures)
 saved_gesture_index = 0
 
@@ -78,10 +78,11 @@ while True:
                 lm_points_normalized.append(norm_y)
 
             predictions = model.predict([lm_points_normalized])
-            print(predictions)
             prediction, prediction_index = np.amax(predictions), np.argmax(predictions)
             if prediction > 0.9:
                 cv2.putText(img, gestures[prediction_index], (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
+                print("Prediction Confidence:", prediction)
+                print("Predicted Class:", prediction_index)
             else:
                 cv2.putText(img, 'Neutral', (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
 

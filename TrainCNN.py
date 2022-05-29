@@ -1,8 +1,11 @@
-import Preprocessing, Util
+import Preprocessing
+import Util
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import mediapipe as mp
+import time
 import cv2
 import os
 
@@ -18,51 +21,56 @@ def create_dataset(_hands):
     # Preprocessing
     for dirpath, dirnames, filenames in os.walk(input_dir):
         if dirpath is not input_dir:  # Ignoring the first path, as it's the folder containing the class sub-folders
+            count = 0
             for i in filenames:
-                path = dirpath + '\\' + i
-                curr_loc = dirpath.split("\\")
-                gesture = gestures[dirpath.split("\\")[-1]]
+                if i != ".DS_Store":
+                    path = dirpath + '\\' + i
+                    gesture = dirpath.split("\\")[1]
 
-                img_orig = cv2.flip(cv2.imread(path), 1)
-                results = hands.process(img_orig)
+                    img_orig = cv2.flip(cv2.imread(path), 1)
+                    img_orig = cv2.cvtColor(img_orig, cv2.COLOR_BGR2RGB)
+                    results = hands.process(img_orig)
 
-                if results.multi_hand_landmarks:
-                    for hand in results.multi_hand_landmarks:
-                        h, w, c = img_orig.shape
-                        lm_points = []
-                        for landmark in hand.landmark:
-                            lm_points.append(landmark.x)
-                            lm_points.append(landmark.y)
+                    if results.multi_hand_landmarks:
+                        for hand in results.multi_hand_landmarks:
+                            h, w, c = img_orig.shape
 
-                        saved_frame_2d = np.reshape(lm_points, (len(hand.landmark), 2))
-                        bb = Util.find_bounding_box(saved_frame_2d)
-                        bb = [(len(img_orig[0]) * bb[0]), (len(img_orig) * bb[1]), (len(img_orig[0]) * bb[2]),
-                              (len(img_orig) * bb[3])]
-                        bias_x, bias_y = (bb[2] - bb[0]) // 5, (bb[3] - bb[1]) // 5
-                        bb = [Util.clamp(bb[0] - bias_x, 0, w), Util.clamp(bb[1] - bias_y, 0, h),
-                              Util.clamp(bb[2] + bias_x, 0, w), Util.clamp(bb[3] + bias_y, 0, h)]
+                            lm_points = []
+                            for landmark in hand.landmark:
+                                lm_points.append(landmark.x)
+                                lm_points.append(landmark.y)
 
-                        img_seg = Preprocessing.segmentate_image_kmeans(img_orig)
-                        img_seg = img_seg[int(bb[1]):int(bb[3]), int(bb[0]):int(bb[2])]
-                        img_seg = cv2.resize(img_seg, (32, 32))
-                        img_seg = cv2.cvtColor(img_seg, cv2.COLOR_BGR2GRAY)
-                        cv2.imwrite(curr_loc[0] + "_seg/" + curr_loc[1] + "/" + i, img_seg)
-                        dataset.append({"Name": i, "Class": gesture, "Image Data": img_seg.tolist()})
+                            saved_frame_2d = np.reshape(lm_points, (len(hand.landmark), 2))
+                            bb = Util.find_bounding_box(saved_frame_2d)
+                            bb = [(len(img_orig[0]) * bb[0]), (len(img_orig) * bb[1]), (len(img_orig[0]) * bb[2]),
+                                  (len(img_orig) * bb[3])]
+                            bias_x, bias_y = (bb[2] - bb[0]) // 5, (bb[3] - bb[1]) // 5
+                            bb = [Util.clamp(bb[0] - bias_x, 0, w), Util.clamp(bb[1] - bias_y, 0, h),
+                                  Util.clamp(bb[2] + bias_x, 0, w), Util.clamp(bb[3] + bias_y, 0, h)]
+
+                            img_orig = cv2.cvtColor(img_orig, cv2.COLOR_RGB2GRAY)
+                            img_seg = Preprocessing.segmentate_image_kmeans(img_orig)
+                            img_seg = img_seg[int(bb[1]):int(bb[3]), int(bb[0]):int(bb[2])]
+                            img_seg = cv2.resize(img_seg, (128, 128), interpolation=cv2.INTER_CUBIC)
+                            img_seg = cv2.GaussianBlur(img_seg, (3, 3), 0)
+                            dataset.append({"Name": i, "Class": gestures[gesture], "Image Data": img_seg.tolist()})
+                            count += 1
 
             print("Class {0} completed".format(gesture))
+            print("Detected: {0}".format(count))
 
     return pd.DataFrame(dataset)
 
 
 if __name__ == '__main__':
     input_dir = "input_new_2"
-    gestures = {"A": 0, "B": 1, "C": 2}  # 0 = Left Click, 1 = Right Click, 2 = Middle Click
+    gestures = {"left": 0, "right": 1, "mid": 2, "neutral": 3}  # 0 = Left Click, 1 = Right Click, 2 = Middle Click
 
     mp_hands = mp.solutions.hands
-    hands = mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.9)
+    hands = mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.75)
     mp_draw = mp.solutions.drawing_utils
 
-    gestures = {"A": 0, "B": 1, "C": 2}  # 0 = Left Click, 1 = Right Click, 2 = Middle Click
+    start_time = time.time()
 
     df_img = create_dataset(hands)
 
@@ -71,12 +79,8 @@ if __name__ == '__main__':
     X = df_img["Image Data"].values.tolist()
     y = df_img["Class"].values.tolist()
 
-    # Split the dataset into 60% train, %20 validation, 20% test data
+    # Split the dataset into 80% train, %20 validation data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-    # X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.25)
-
-    # X_train = X_train.reshape(X_train.shape[0], 200, 200, 1)
-    # X_test = X_test.reshape(X_test.shape[0], 200, 200, 1)
 
     from tensorflow.keras.models import Sequential
     from tensorflow.keras.layers import Conv2D, MaxPooling2D, BatchNormalization, Dense, Flatten, Dropout
@@ -154,3 +158,5 @@ if __name__ == '__main__':
     axs[1].legend(loc="upper right")
     axs[1].set_yticks(np.arange(2, 0, -0.2))
     plt.show()
+
+    print("Elapsed Time: ", time.time() - start_time)
