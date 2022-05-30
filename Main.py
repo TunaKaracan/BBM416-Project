@@ -1,23 +1,31 @@
-import numpy as np
+import time
+
 import cv2
 import mediapipe as mp
+import numpy as np
 import tensorflow as tf
-
-import time
+import mouse
+import ctypes
+import win32api
+import win32con
 
 cam = cv2.VideoCapture(0)
 
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.95, min_tracking_confidence=0.95)
+hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.75, min_tracking_confidence=0.75)
 mp_draw = mp.solutions.drawing_utils
 
 prev_time = time.time()
 
-gestures = ['Left Click', 'Right Click', 'Middle Click']
+gestures = ['Left Click', 'Right Click', 'Middle Click', 'Neutral']
 num_gestures = len(gestures)
 saved_gesture_index = 0
 
-model = tf.keras.models.load_model('model/model.h5')
+model = tf.keras.models.load_model('model/model_classic.h5')
+
+time_passed_since_last_prediction = 1
+prediction_interval = 1
+is_scrolling = False
 
 
 def find_bounding_box(points):
@@ -79,16 +87,44 @@ while True:
 
             predictions = model.predict([lm_points_normalized])
             prediction, prediction_index = np.amax(predictions), np.argmax(predictions)
-            if prediction > 0.9:
-                cv2.putText(img, gestures[prediction_index], (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
-                print("Prediction Confidence:", prediction)
-                print("Predicted Class:", prediction_index)
+            cv2.putText(img, gestures[prediction_index] if prediction > 0.8 and prediction_index != 3 else 'Neutral', (0, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
+
+            x, y = hand.landmark[0].x * 1.4 - 0.2, hand.landmark[1].y * 1.4 - 0.2
+            mouse.move(x * ctypes.windll.user32.GetSystemMetrics(0), y * ctypes.windll.user32.GetSystemMetrics(1))
+            if prediction > 0.8:
+                if prediction_index == 0 and time_passed_since_last_prediction > prediction_interval:
+                    if is_scrolling:
+                        win32api.mouse_event(win32con.MOUSEEVENTF_MIDDLEDOWN, 0, 0)
+                        is_scrolling = False
+                    mouse.click('left')
+                    time_passed_since_last_prediction = 0
+                elif prediction_index == 1 and time_passed_since_last_prediction > prediction_interval:
+                    if is_scrolling:
+                        win32api.mouse_event(win32con.MOUSEEVENTF_MIDDLEDOWN, 0, 0)
+                        is_scrolling = False
+                    mouse.click('right')
+                    time_passed_since_last_prediction = 0
+                elif prediction_index == 2:
+                    if not is_scrolling:
+                        win32api.mouse_event(win32con.MOUSEEVENTF_MIDDLEDOWN, 0, 0)
+                        is_scrolling = True
+                    time_passed_since_last_prediction = 0
+                else:
+                    if is_scrolling:
+                        win32api.mouse_event(win32con.MOUSEEVENTF_MIDDLEDOWN, 0, 0)
+                        is_scrolling = False
+                    win32api.mouse_event(win32con.MOUSEEVENTF_MIDDLEUP, 0, 0)
             else:
-                cv2.putText(img, 'Neutral', (500, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
+                if is_scrolling:
+                    win32api.mouse_event(win32con.MOUSEEVENTF_MIDDLEDOWN, 0, 0)
+                    is_scrolling = False
+                win32api.mouse_event(win32con.MOUSEEVENTF_MIDDLEUP, 0, 0)
 
     current_time = time.time()
-    delta_time = 1 / (current_time - prev_time)
-    cv2.putText(img, str(int(delta_time)), (0, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
+    delta_time = current_time - prev_time
+    fps = 1 / delta_time
+    time_passed_since_last_prediction += delta_time
+    cv2.putText(img, str(int(fps)), (580, 40), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 0), 3)
     prev_time = current_time
     cv2.imshow('Image', img)
     cv2.waitKey(1)

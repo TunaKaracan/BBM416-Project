@@ -56,23 +56,6 @@ def create_skeleton(image_path, _out_dir, _out_path, _gestures, _gesture_name, _
         return None, None, None
 
 
-def dfs_padding(cur_path, _x_len, _y_len):
-    print(f'Currently padding: {cur_path}')
-    try:
-        sub_dirs = os.listdir(cur_path)
-        for sub_dir in sub_dirs:
-            dfs_padding(os.path.join(cur_path, sub_dir), _x_len, _y_len)
-    except NotADirectoryError:
-        cur_dirs = cur_path.split(os.path.sep)
-        if cur_dirs[-1].split('.')[-1] in ['png', 'jpg', 'jpeg']:
-            img = cv2.imread(cur_path)
-            h, w = img.shape[:2]
-            top, left = (_y_len - h) // 2, (_x_len - w) // 2
-            bot, right = _y_len - h - top, _x_len - w - left
-            img = cv2.copyMakeBorder(img, top, bot, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
-            cv2.imwrite(cur_path, img)
-
-
 def dfs_output(cur_path, prev_path, _out_dir, _out_path, _gestures, _mp_hands, _hands, _mp_draw):
     print(f'Currently processing: {cur_path}')
     _x_len, _y_len = 0, 0
@@ -103,11 +86,10 @@ if __name__ == '__main__':
     out_dir = 'output'
     out_path = 'data.csv'
 
-    gestures = {'A': 0, 'B': 1, 'C': 2}  # 0 = Left Click, 1 = Right Click, 2 = Middle Click
+    gestures = {'Left': 0, 'Right': 1, 'Middle': 2, 'Neutral': 3}  # 0 = Left Click, 1 = Right Click, 2 = Middle Click, 3 = None
 
     mp_hands = mp.solutions.hands
-    hands = mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.9)
+    hands = mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.75)
     mp_draw = mp.solutions.drawing_utils
 
     x_len, y_len = dfs_output(in_dir, str(), out_dir, out_path, gestures, mp_hands, hands, mp_draw)
-    dfs_padding(out_dir, x_len, y_len)
